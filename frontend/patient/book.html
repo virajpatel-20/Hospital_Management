@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Book Appointment — MediCare</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="dashboard-layout" id="app">
+  <div class="loading-container"><div class="loading-spinner"></div></div>
+</div>
+
+<script src="../js/main.js"></script>
+<script src="../js/sidebar.js"></script>
+<script>
+let allDoctors = [];
+let selectedDoctor = null;
+
+async function init() {
+  const user = requireAuth("patient");
+  if (!user) return;
+
+  const app = document.getElementById("app");
+  const today = new Date().toISOString().split("T")[0];
+
+  app.innerHTML = renderPatientSidebar(user) + `
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-title">Book Appointment</div>
+          <div class="topbar-sub">Find and book your appointment</div>
+        </div>
+      </div>
+      <div class="page-content">
+        <div style="display: grid; grid-template-columns: 1fr 1.1fr; gap: 24px; align-items: start;">
+
+          <!-- DOCTOR SEARCH -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Choose a Doctor</div>
+                <div class="card-sub">Search by name or specialization</div>
+              </div>
+            </div>
+
+            <div class="search-box" style="margin-bottom: 16px;">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="doctor-search" placeholder="Search doctors..." oninput="filterDoctors()">
+            </div>
+
+            <div class="form-group">
+              <select id="spec-filter" class="form-select" onchange="filterDoctors()">
+                <option value="">All Specializations</option>
+              </select>
+            </div>
+
+            <div id="doctor-list" class="doctor-grid" style="grid-template-columns: 1fr 1fr;">
+              <div class="loading-container"><div class="loading-spinner"></div></div>
+            </div>
+          </div>
+
+          <!-- BOOKING FORM -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Appointment Details</div>
+                <div class="card-sub">Fill in your appointment info</div>
+              </div>
+            </div>
+
+            <div id="alert" class="alert hidden"></div>
+
+            <!-- Selected Doctor Preview -->
+            <div id="selected-doctor-preview" class="hidden" style="padding: 16px; background: var(--primary-light); border-radius: 10px; border: 1px solid var(--primary); margin-bottom: 20px;">
+              <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 4px;">Selected Doctor</div>
+              <div id="selected-doctor-name" style="font-weight: 700; color: var(--primary); font-size: 15px;"></div>
+              <div id="selected-doctor-spec" style="font-size: 12.5px; color: var(--text-muted);"></div>
+            </div>
+
+            <div style="background: var(--bg); border-radius: 10px; padding: 14px; margin-bottom: 20px; font-size: 13px;">
+              <strong>${user.name}</strong><br>
+              <span class="text-muted">${user.email}</span>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Date *</label>
+                <input type="date" id="date" class="form-control" min="${today}">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Time *</label>
+                <select id="time" class="form-select">
+                  <option value="">Select time</option>
+                  <option>09:00</option><option>09:30</option>
+                  <option>10:00</option><option>10:30</option>
+                  <option>11:00</option><option>11:30</option>
+                  <option>12:00</option><option>14:00</option>
+                  <option>14:30</option><option>15:00</option>
+                  <option>15:30</option><option>16:00</option>
+                  <option>16:30</option><option>17:00</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Reason for Visit *</label>
+              <input type="text" id="reason" class="form-control" placeholder="e.g., Routine checkup, Fever, Consultation...">
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Additional Notes</label>
+              <textarea id="notes" class="form-control" placeholder="Any additional information for the doctor..."></textarea>
+            </div>
+
+            <button class="btn btn-primary btn-full btn-lg" onclick="bookAppointment('${user.name}', '${user.email}')" id="bookBtn">
+              📅 Confirm Booking
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  setActiveSidebarLink();
+  await loadDoctors();
+}
+
+async function loadDoctors() {
+  const result = await apiGet("/doctors");
+  const list = document.getElementById("doctor-list");
+  const specFilter = document.getElementById("spec-filter");
+
+  if (!result.ok || !result.data.length) {
+    list.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;"><div class="empty-state-icon">👨‍⚕️</div><div>No doctors available</div></div>`;
+    return;
+  }
+
+  allDoctors = result.data;
+
+  // Populate specializations
+  const specs = [...new Set(allDoctors.map(d => d.specialization).filter(Boolean))];
+  specs.forEach(s => {
+    const opt = document.createElement("option");
+    opt.value = s; opt.textContent = s;
+    specFilter.appendChild(opt);
+  });
+
+  renderDoctors(allDoctors);
+}
+
+function filterDoctors() {
+  const search = document.getElementById("doctor-search").value.toLowerCase();
+  const spec = document.getElementById("spec-filter").value.toLowerCase();
+  const filtered = allDoctors.filter(d => {
+    const nameMatch = d.name.toLowerCase().includes(search) || (d.specialization || "").toLowerCase().includes(search);
+    const specMatch = !spec || (d.specialization || "").toLowerCase() === spec;
+    return nameMatch && specMatch;
+  });
+  renderDoctors(filtered);
+}
+
+function renderDoctors(doctors) {
+  const list = document.getElementById("doctor-list");
+  if (!doctors.length) {
+    list.innerHTML = `<div class="empty-state" style="grid-column: 1/-1;"><div>No doctors found</div></div>`;
+    return;
+  }
+  list.innerHTML = doctors.map(d => `
+    <div class="doctor-card" onclick="selectDoctor('${d._id}', '${d.name}', '${d.email}', '${d.specialization || "General"}')"
+         id="doc-${d._id}" style="padding: 16px;">
+      <div class="doctor-avatar" style="width:52px;height:52px;font-size:18px;">${getInitials(d.name)}</div>
+      <div class="doctor-name" style="font-size:14px;">Dr. ${d.name}</div>
+      <div class="doctor-spec">${d.specialization || "General"}</div>
+      ${d.department ? `<div class="doctor-dept">${d.department}</div>` : ""}
+    </div>
+  `).join("");
+}
+
+function selectDoctor(id, name, email, spec) {
+  selectedDoctor = { name, email, spec };
+  document.querySelectorAll(".doctor-card").forEach(c => c.style.borderColor = "var(--border)");
+  const card = document.getElementById(`doc-${id}`);
+  if (card) card.style.borderColor = "var(--primary)";
+  document.getElementById("selected-doctor-preview").classList.remove("hidden");
+  document.getElementById("selected-doctor-name").textContent = "Dr. " + name;
+  document.getElementById("selected-doctor-spec").textContent = spec;
+  document.getElementById("alert").classList.add("hidden");
+}
+
+async function bookAppointment(patientName, patientEmail) {
+  hideAlert("alert");
+
+  if (!selectedDoctor) {
+    showAlert("alert", "Please select a doctor first.");
+    return;
+  }
+
+  const date = document.getElementById("date").value;
+  const time = document.getElementById("time").value;
+  const reason = document.getElementById("reason").value.trim();
+
+  if (!date || !time || !reason) {
+    showAlert("alert", "Please fill in the date, time, and reason.");
+    return;
+  }
+
+  const btn = document.getElementById("bookBtn");
+  btn.disabled = true;
+  btn.textContent = "Booking...";
+
+  const result = await apiPost("/book-appointment", {
+    patient_name: patientName,
+    patient_email: patientEmail,
+    doctor_name: selectedDoctor.name,
+    doctor_email: selectedDoctor.email,
+    date, time, reason,
+    notes: document.getElementById("notes").value.trim()
+  });
+
+  btn.disabled = false;
+  btn.textContent = "📅 Confirm Booking";
+
+  if (result.ok) {
+    showToast(result.data.message, "success");
+    setTimeout(() => window.location.href = "appointments.html", 1500);
+  } else {
+    showAlert("alert", result.data.error || "Booking failed.");
+  }
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Appointments — MediCare</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="dashboard-layout" id="app">
+  <div class="loading-container"><div class="loading-spinner"></div></div>
+</div>
+
+<script src="../js/main.js"></script>
+<script src="../js/sidebar.js"></script>
+<script>
+let allAppointments = [];
+let activeStatus = "";
+
+async function init() {
+  const user = requireAuth("patient");
+  if (!user) return;
+
+  const app = document.getElementById("app");
+  app.innerHTML = renderPatientSidebar(user) + `
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-title">My Appointments</div>
+          <div class="topbar-sub">Your complete appointment history</div>
+        </div>
+        <div class="topbar-right">
+          <a href="book.html" class="btn btn-primary btn-sm">+ New Appointment</a>
+        </div>
+      </div>
+      <div class="page-content">
+        <div class="filter-bar">
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterBy('')" id="tab-all">All</button>
+            <button class="filter-tab" onclick="filterBy('Pending')" id="tab-Pending">Pending</button>
+            <button class="filter-tab" onclick="filterBy('Approved')" id="tab-Approved">Approved</button>
+            <button class="filter-tab" onclick="filterBy('Completed')" id="tab-Completed">Completed</button>
+            <button class="filter-tab" onclick="filterBy('Cancelled')" id="tab-Cancelled">Cancelled</button>
+          </div>
+          <div class="search-box">
+            <span>🔍</span>
+            <input type="text" id="search" placeholder="Search doctor, reason..." oninput="renderList()">
+          </div>
+        </div>
+
+        <div id="appointments-list">
+          <div class="loading-container"><div class="loading-spinner"></div></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  setActiveSidebarLink();
+  await loadAppointments(user.email);
+}
+
+async function loadAppointments(email) {
+  const result = await apiGet(`/my-appointments/${email}`);
+  if (result.ok) {
+    allAppointments = result.data;
+    renderList();
+  } else {
+    document.getElementById("appointments-list").innerHTML = `<div class="alert alert-error">Failed to load appointments.</div>`;
+  }
+}
+
+function filterBy(status) {
+  activeStatus = status;
+  document.querySelectorAll(".filter-tab").forEach(t => t.classList.remove("active"));
+  const tabId = status ? `tab-${status}` : "tab-all";
+  document.getElementById(tabId)?.classList.add("active");
+  renderList();
+}
+
+function renderList() {
+  const search = document.getElementById("search")?.value.toLowerCase() || "";
+  const el = document.getElementById("appointments-list");
+
+  let filtered = allAppointments;
+  if (activeStatus) filtered = filtered.filter(a => a.status === activeStatus);
+  if (search) filtered = filtered.filter(a =>
+    a.doctor_name.toLowerCase().includes(search) ||
+    (a.reason || "").toLowerCase().includes(search)
+  );
+
+  if (!filtered.length) {
+    el.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">📭</div>
+        <div class="empty-state-title">No appointments found</div>
+        <div class="empty-state-sub">Try adjusting your filters or book a new appointment</div>
+        <a href="book.html" class="btn btn-primary">Book Appointment</a>
+      </div>
+    `;
+    return;
+  }
+
+  el.innerHTML = `<div class="appointment-list">` + filtered.map(a => `
+    <div class="appointment-card status-${a.status.toLowerCase()}">
+      <div class="appt-avatar">${getInitials(a.doctor_name)}</div>
+      <div class="appt-info">
+        <div class="appt-name">Dr. ${a.doctor_name}</div>
+        <div class="appt-sub">${a.reason || "No reason specified"}</div>
+        <div class="appt-meta">
+          <span class="appt-meta-item">📅 ${formatDate(a.date)}</span>
+          <span class="appt-meta-item">🕐 ${formatTime(a.time)}</span>
+          ${a.notes ? `<span class="appt-meta-item">📝 Has notes</span>` : ""}
+        </div>
+        ${a.doctor_notes ? `<div style="margin-top: 10px; font-size: 12.5px; background: var(--bg); padding: 8px 12px; border-radius: 8px; color: var(--text-muted);">
+          <strong>Doctor's Note:</strong> ${a.doctor_notes}
+        </div>` : ""}
+      </div>
+      <div class="appt-actions">
+        ${statusBadge(a.status)}
+        ${a.status === "Pending" || a.status === "Approved" ? `
+          <button class="btn btn-danger btn-sm" onclick="cancelAppointment('${a._id}')">Cancel</button>
+        ` : ""}
+      </div>
+    </div>
+  `).join("") + `</div>`;
+}
+
+async function cancelAppointment(id) {
+  if (!confirm("Are you sure you want to cancel this appointment?")) return;
+  const result = await apiPut(`/cancel/${id}`);
+  if (result.ok) {
+    showToast("Appointment cancelled.", "success");
+    const appt = allAppointments.find(a => a._id === id);
+    if (appt) appt.status = "Cancelled";
+    renderList();
+  } else {
+    showToast(result.data.error || "Failed to cancel.", "error");
+  }
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — MediCare HMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="auth-wrapper">
+  <!-- LEFT PANEL -->
+  <div class="auth-left">
+    <div class="auth-brand">
+      <div class="auth-brand-icon">🏥</div>
+      <div>
+        <div class="auth-brand-name">MediCare</div>
+      </div>
+    </div>
+    <h1 class="auth-hero-title">Your Health,<br><em>Our Priority</em></h1>
+    <p class="auth-hero-sub">Seamlessly manage appointments, connect with doctors, and access your health records.</p>
+    <ul class="auth-feature-list">
+      <li><span>📅</span><span>Easy appointment booking</span></li>
+      <li><span>👨‍⚕️</span><span>Connect with qualified doctors</span></li>
+      <li><span>📋</span><span>Complete appointment history</span></li>
+      <li><span>🔒</span><span>Secure & private records</span></li>
+    </ul>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="auth-right">
+    <div class="auth-form-container">
+      <h2 class="auth-form-title">Welcome back 👋</h2>
+      <p class="auth-form-sub">Sign in to your MediCare account</p>
+
+      <div id="alert" class="alert hidden"></div>
+
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" id="email" class="form-control" placeholder="Enter your email">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="password" class="form-control" placeholder="Enter your password">
+      </div>
+
+      <button class="btn btn-primary btn-full btn-lg" onclick="login()" id="loginBtn">
+        Sign In
+      </button>
+
+      <div class="divider"></div>
+
+      <p class="text-center text-sm text-muted">
+        Don't have an account?
+        <a href="register.html" style="color: var(--primary); font-weight: 600; text-decoration: none;">Create account</a>
+      </p>
+
+      <div style="margin-top: 24px; padding: 14px; background: var(--bg); border-radius: 10px; font-size: 12.5px; color: var(--text-muted);">
+        <strong style="color: var(--text);">Demo Credentials:</strong><br>
+        Admin: admin@hospital.com / admin123<br>
+        Doctor: doctor@hospital.com / doctor123<br>
+        Patient: patient@hospital.com / patient123
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="js/main.js"></script>
+<script>
+async function login() {
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  const btn = document.getElementById("loginBtn");
+
+  hideAlert("alert");
+
+  if (!email || !password) {
+    showAlert("alert", "Please enter your email and password.");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Signing in...";
+
+  const result = await apiPost("/login", { email, password });
+  btn.disabled = false;
+  btn.textContent = "Sign In";
+
+  if (result.ok) {
+    setUser(result.data.user);
+    showToast("Login successful! Redirecting...", "success");
+    const role = result.data.user.role;
+    setTimeout(() => {
+      if (role === "patient") window.location.href = "patient/dashboard.html";
+      else if (role === "doctor") window.location.href = "doctor/dashboard.html";
+      else if (role === "admin") window.location.href = "admin/dashboard.html";
+    }, 800);
+  } else {
+    showAlert("alert", result.data.error || "Login failed. Please try again.");
+  }
+}
+
+// Enter key support
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter") login();
+});
+
+// Redirect if already logged in
+const user = getUser();
+if (user) {
+  if (user.role === "patient") window.location.href = "patient/dashboard.html";
+  else if (user.role === "doctor") window.location.href = "doctor/dashboard.html";
+  else if (user.role === "admin") window.location.href = "admin/dashboard.html";
+}
+</script>
+</body>
+</html>

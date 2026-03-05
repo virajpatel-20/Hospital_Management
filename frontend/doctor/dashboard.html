@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doctor Dashboard — MediCare</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="dashboard-layout" id="app">
+  <div class="loading-container"><div class="loading-spinner"></div></div>
+</div>
+<script src="../js/main.js"></script>
+<script src="../js/sidebar.js"></script>
+<script>
+async function init() {
+  const user = requireAuth("doctor");
+  if (!user) return;
+
+  const app = document.getElementById("app");
+  app.innerHTML = renderDoctorSidebar(user) + `
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-title">Doctor Dashboard</div>
+          <div class="topbar-sub">Welcome, Dr. ${user.name}!</div>
+        </div>
+      </div>
+      <div class="page-content">
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card"><div class="stat-icon blue">📋</div><div class="stat-info"><div class="stat-value" id="stat-total">—</div><div class="stat-label">Total Appointments</div></div></div>
+          <div class="stat-card"><div class="stat-icon orange">⏳</div><div class="stat-info"><div class="stat-value" id="stat-pending">—</div><div class="stat-label">Pending Review</div></div></div>
+          <div class="stat-card"><div class="stat-icon green">✅</div><div class="stat-info"><div class="stat-value" id="stat-approved">—</div><div class="stat-label">Approved</div></div></div>
+          <div class="stat-card"><div class="stat-icon blue">🏁</div><div class="stat-info"><div class="stat-value" id="stat-completed">—</div><div class="stat-label">Completed</div></div></div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Pending Appointments</div>
+              <div class="card-sub">Appointments awaiting your approval</div>
+            </div>
+            <a href="appointments.html" class="btn btn-ghost btn-sm">View All →</a>
+          </div>
+          <div id="pending-list">
+            <div class="loading-container"><div class="loading-spinner"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  setActiveSidebarLink();
+  await loadStats(user.email);
+  await loadPending(user.email);
+}
+
+async function loadStats(email) {
+  const result = await apiGet(`/doctor/stats/${email}`);
+  if (result.ok) {
+    document.getElementById("stat-total").textContent = result.data.total;
+    document.getElementById("stat-pending").textContent = result.data.pending;
+    document.getElementById("stat-approved").textContent = result.data.approved;
+    document.getElementById("stat-completed").textContent = result.data.completed;
+  }
+}
+
+async function loadPending(email) {
+  const result = await apiGet(`/doctor/appointments/${email}?status=Pending`);
+  const el = document.getElementById("pending-list");
+  if (!result.ok || !result.data.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🎉</div><div class="empty-state-title">No pending appointments</div></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="appointment-list">` + result.data.slice(0, 5).map(a => `
+    <div class="appointment-card status-pending">
+      <div class="appt-avatar">${getInitials(a.patient_name)}</div>
+      <div class="appt-info">
+        <div class="appt-name">${a.patient_name}</div>
+        <div class="appt-sub">${a.reason || "No reason"}</div>
+        <div class="appt-meta">
+          <span class="appt-meta-item">📅 ${formatDate(a.date)}</span>
+          <span class="appt-meta-item">🕐 ${formatTime(a.time)}</span>
+        </div>
+      </div>
+      <div class="appt-actions">
+        <button class="btn btn-secondary btn-sm" onclick="approve('${a._id}')">✓ Approve</button>
+        <button class="btn btn-danger btn-sm" onclick="cancel('${a._id}')">✕</button>
+      </div>
+    </div>
+  `).join("") + `</div>`;
+}
+
+async function approve(id) {
+  const result = await apiPut(`/doctor/approve/${id}`);
+  if (result.ok) {
+    showToast("Appointment approved!", "success");
+    const user = getUser();
+    loadPending(user.email);
+    loadStats(user.email);
+  } else {
+    showToast(result.data.error || "Failed", "error");
+  }
+}
+
+async function cancel(id) {
+  if (!confirm("Cancel this appointment?")) return;
+  const result = await apiPut(`/doctor/cancel/${id}`);
+  if (result.ok) {
+    showToast("Appointment cancelled.", "success");
+    const user = getUser();
+    loadPending(user.email);
+    loadStats(user.email);
+  }
+}
+
+init();
+</script>
+</body>
+</html>

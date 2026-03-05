@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manage Users — Admin | MediCare</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="dashboard-layout" id="app">
+  <div class="loading-container"><div class="loading-spinner"></div></div>
+</div>
+<script src="../js/main.js"></script>
+<script src="../js/sidebar.js"></script>
+<script>
+let allUsers = [];
+let activeRole = "";
+
+async function init() {
+  const user = requireAuth("admin");
+  if (!user) return;
+
+  const app = document.getElementById("app");
+  app.innerHTML = renderAdminSidebar(user) + `
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-title">Manage Users</div>
+          <div class="topbar-sub">All registered users</div>
+        </div>
+        <div class="topbar-right">
+          <a href="add-doctor.html" class="btn btn-secondary btn-sm">+ Add Doctor</a>
+        </div>
+      </div>
+      <div class="page-content">
+        <div class="filter-bar">
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterBy('')" id="tab-all">All Users</button>
+            <button class="filter-tab" onclick="filterBy('patient')" id="tab-patient">Patients</button>
+            <button class="filter-tab" onclick="filterBy('doctor')" id="tab-doctor">Doctors</button>
+          </div>
+          <div class="search-box">
+            <span>🔍</span>
+            <input type="text" id="search" placeholder="Search by name or email..." oninput="renderTable()">
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Details</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="table-body">
+                <tr><td colspan="6" style="text-align:center;padding:40px;"><div class="loading-spinner" style="margin:auto;"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  setActiveSidebarLink();
+  await loadUsers();
+}
+
+async function loadUsers() {
+  const result = await apiGet("/admin/users");
+  if (result.ok) {
+    allUsers = result.data;
+    renderTable();
+  }
+}
+
+function filterBy(role) {
+  activeRole = role;
+  document.querySelectorAll(".filter-tab").forEach(t => t.classList.remove("active"));
+  document.getElementById(role ? `tab-${role}` : "tab-all")?.classList.add("active");
+  renderTable();
+}
+
+function renderTable() {
+  const search = document.getElementById("search")?.value.toLowerCase() || "";
+  const tbody = document.getElementById("table-body");
+  let filtered = allUsers;
+  if (activeRole) filtered = filtered.filter(u => u.role === activeRole);
+  if (search) filtered = filtered.filter(u =>
+    u.name.toLowerCase().includes(search) ||
+    u.email.toLowerCase().includes(search)
+  );
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No users found</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(u => `
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:12px;flex-shrink:0;">${getInitials(u.name)}</div>
+          <span style="font-weight:600;">${u.name}</span>
+        </div>
+      </td>
+      <td style="font-size:13px;color:var(--text-muted);">${u.email}</td>
+      <td>${roleBadge(u.role)}</td>
+      <td style="font-size:12.5px;color:var(--text-muted);">
+        ${u.role === "doctor" ? `${u.specialization || "—"}` : `${u.age ? u.age + " yrs" : "—"} ${u.blood_group ? "• " + u.blood_group : ""}`}
+      </td>
+      <td>
+        <span class="badge ${u.is_active !== false ? 'badge-approved' : 'badge-cancelled'}">
+          ${u.is_active !== false ? "Active" : "Inactive"}
+        </span>
+      </td>
+      <td>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="toggleUser('${u._id}', ${u.is_active !== false})">
+            ${u.is_active !== false ? "Deactivate" : "Activate"}
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="deleteUser('${u._id}', '${u.name}')">Delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+}
+
+async function toggleUser(id, isActive) {
+  const result = await apiPut(`/admin/user/toggle/${id}`);
+  if (result.ok) {
+    showToast(result.data.message, "success");
+    const u = allUsers.find(u => u._id === id);
+    if (u) u.is_active = !isActive;
+    renderTable();
+  }
+}
+
+async function deleteUser(id, name) {
+  if (!confirm(`Are you sure you want to permanently delete ${name}?`)) return;
+  const result = await apiDelete(`/admin/user/${id}`);
+  if (result.ok) {
+    showToast("User deleted.", "success");
+    allUsers = allUsers.filter(u => u._id !== id);
+    renderTable();
+  } else {
+    showToast(result.data.error || "Failed.", "error");
+  }
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>All Appointments — Admin | MediCare</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="dashboard-layout" id="app">
+  <div class="loading-container"><div class="loading-spinner"></div></div>
+</div>
+<script src="../js/main.js"></script>
+<script src="../js/sidebar.js"></script>
+<script>
+let allAppointments = [];
+let activeStatus = "";
+
+async function init() {
+  const user = requireAuth("admin");
+  if (!user) return;
+
+  const app = document.getElementById("app");
+  app.innerHTML = renderAdminSidebar(user) + `
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-title">All Appointments</div>
+          <div class="topbar-sub">Complete appointment management</div>
+        </div>
+      </div>
+      <div class="page-content">
+        <div class="filter-bar">
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterBy('')" id="tab-all">All</button>
+            <button class="filter-tab" onclick="filterBy('Pending')" id="tab-Pending">Pending</button>
+            <button class="filter-tab" onclick="filterBy('Approved')" id="tab-Approved">Approved</button>
+            <button class="filter-tab" onclick="filterBy('Completed')" id="tab-Completed">Completed</button>
+            <button class="filter-tab" onclick="filterBy('Cancelled')" id="tab-Cancelled">Cancelled</button>
+          </div>
+          <div class="search-box">
+            <span>🔍</span>
+            <input type="text" id="search" placeholder="Search patient, doctor..." oninput="renderTable()">
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Patient</th>
+                  <th>Doctor</th>
+                  <th>Date & Time</th>
+                  <th>Reason</th>
+                  <th>Status</th>
+                  <th>Booked On</th>
+                </tr>
+              </thead>
+              <tbody id="table-body">
+                <tr><td colspan="6" style="text-align:center;padding:40px;"><div class="loading-spinner" style="margin:auto;"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  setActiveSidebarLink();
+  await loadAppointments();
+}
+
+async function loadAppointments() {
+  const result = await apiGet("/admin/appointments");
+  if (result.ok) {
+    allAppointments = result.data;
+    renderTable();
+  }
+}
+
+function filterBy(status) {
+  activeStatus = status;
+  document.querySelectorAll(".filter-tab").forEach(t => t.classList.remove("active"));
+  document.getElementById(status ? `tab-${status}` : "tab-all")?.classList.add("active");
+  renderTable();
+}
+
+function renderTable() {
+  const search = document.getElementById("search")?.value.toLowerCase() || "";
+  const tbody = document.getElementById("table-body");
+  let filtered = allAppointments;
+  if (activeStatus) filtered = filtered.filter(a => a.status === activeStatus);
+  if (search) filtered = filtered.filter(a =>
+    a.patient_name.toLowerCase().includes(search) ||
+    a.doctor_name.toLowerCase().includes(search) ||
+    (a.patient_email || "").toLowerCase().includes(search)
+  );
+
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted);">No appointments found</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(a => `
+    <tr>
+      <td>
+        <div style="font-weight:600;">${a.patient_name}</div>
+        <div style="font-size:12px;color:var(--text-muted);">${a.patient_email}</div>
+      </td>
+      <td>
+        <div style="font-weight:600;">Dr. ${a.doctor_name}</div>
+      </td>
+      <td>
+        <div>${formatDate(a.date)}</div>
+        <div style="font-size:12px;color:var(--text-muted);">${formatTime(a.time)}</div>
+      </td>
+      <td style="max-width:150px;color:var(--text-muted);font-size:13px;">${a.reason || '—'}</td>
+      <td>${statusBadge(a.status)}</td>
+      <td style="font-size:12px;color:var(--text-muted);">${a.created_at ? formatDate(a.created_at.split("T")[0]) : "—"}</td>
+    </tr>
+  `).join("");
+}
+
+init();
+</script>
+</body>
+</html>

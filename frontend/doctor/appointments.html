@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Appointments — Doctor | MediCare</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="dashboard-layout" id="app">
+  <div class="loading-container"><div class="loading-spinner"></div></div>
+</div>
+
+<!-- Complete Modal -->
+<div class="modal-backdrop" id="complete-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Complete Appointment</div>
+      <button class="modal-close" onclick="closeModal('complete-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Doctor's Notes (optional)</label>
+        <textarea id="doctor-notes" class="form-control" placeholder="Add consultation notes, prescription hints..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('complete-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmComplete()">Mark as Completed</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/main.js"></script>
+<script src="../js/sidebar.js"></script>
+<script>
+let allAppointments = [];
+let activeStatus = "";
+let completeId = null;
+
+async function init() {
+  const user = requireAuth("doctor");
+  if (!user) return;
+
+  const app = document.getElementById("app");
+  app.innerHTML = renderDoctorSidebar(user) + `
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-title">Appointments</div>
+          <div class="topbar-sub">Manage your patient appointments</div>
+        </div>
+      </div>
+      <div class="page-content">
+        <div class="filter-bar">
+          <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterBy('')" id="tab-all">All</button>
+            <button class="filter-tab" onclick="filterBy('Pending')" id="tab-Pending">Pending</button>
+            <button class="filter-tab" onclick="filterBy('Approved')" id="tab-Approved">Approved</button>
+            <button class="filter-tab" onclick="filterBy('Completed')" id="tab-Completed">Completed</button>
+            <button class="filter-tab" onclick="filterBy('Cancelled')" id="tab-Cancelled">Cancelled</button>
+          </div>
+          <div class="search-box">
+            <span>🔍</span>
+            <input type="text" id="search" placeholder="Search by patient name..." oninput="renderList()">
+          </div>
+        </div>
+        <div id="appointments-list">
+          <div class="loading-container"><div class="loading-spinner"></div></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  setActiveSidebarLink();
+  await loadAppointments(user.email);
+}
+
+async function loadAppointments(email) {
+  const result = await apiGet(`/doctor/appointments/${email}`);
+  if (result.ok) {
+    allAppointments = result.data;
+    renderList();
+  }
+}
+
+function filterBy(status) {
+  activeStatus = status;
+  document.querySelectorAll(".filter-tab").forEach(t => t.classList.remove("active"));
+  document.getElementById(status ? `tab-${status}` : "tab-all")?.classList.add("active");
+  renderList();
+}
+
+function renderList() {
+  const search = document.getElementById("search")?.value.toLowerCase() || "";
+  const el = document.getElementById("appointments-list");
+  let filtered = allAppointments;
+  if (activeStatus) filtered = filtered.filter(a => a.status === activeStatus);
+  if (search) filtered = filtered.filter(a => a.patient_name.toLowerCase().includes(search));
+
+  if (!filtered.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-title">No appointments found</div></div>`;
+    return;
+  }
+
+  el.innerHTML = `<div class="appointment-list">` + filtered.map(a => `
+    <div class="appointment-card status-${a.status.toLowerCase()}">
+      <div class="appt-avatar">${getInitials(a.patient_name)}</div>
+      <div class="appt-info">
+        <div class="appt-name">${a.patient_name}</div>
+        <div class="appt-sub">${a.patient_email} • ${a.reason || "No reason"}</div>
+        <div class="appt-meta">
+          <span class="appt-meta-item">📅 ${formatDate(a.date)}</span>
+          <span class="appt-meta-item">🕐 ${formatTime(a.time)}</span>
+        </div>
+        ${a.notes ? `<div style="margin-top: 8px; font-size: 12.5px; color: var(--text-muted);">📝 Patient note: ${a.notes}</div>` : ""}
+        ${a.doctor_notes ? `<div style="margin-top: 6px; font-size: 12.5px; background: var(--bg); padding: 8px 12px; border-radius: 8px;">🩺 <strong>Your note:</strong> ${a.doctor_notes}</div>` : ""}
+      </div>
+      <div class="appt-actions">
+        ${statusBadge(a.status)}
+        ${a.status === "Pending" ? `
+          <button class="btn btn-secondary btn-sm" onclick="approve('${a._id}')">✓ Approve</button>
+          <button class="btn btn-danger btn-sm" onclick="cancelAppt('${a._id}')">✕</button>
+        ` : ""}
+        ${a.status === "Approved" ? `
+          <button class="btn btn-primary btn-sm" onclick="openComplete('${a._id}')">🏁 Complete</button>
+          <button class="btn btn-danger btn-sm" onclick="cancelAppt('${a._id}')">✕ Cancel</button>
+        ` : ""}
+      </div>
+    </div>
+  `).join("") + `</div>`;
+}
+
+async function approve(id) {
+  const result = await apiPut(`/doctor/approve/${id}`);
+  if (result.ok) {
+    showToast("Appointment approved!", "success");
+    const appt = allAppointments.find(a => a._id === id);
+    if (appt) appt.status = "Approved";
+    renderList();
+  }
+}
+
+function openComplete(id) {
+  completeId = id;
+  document.getElementById("doctor-notes").value = "";
+  openModal("complete-modal");
+}
+
+async function confirmComplete() {
+  const notes = document.getElementById("doctor-notes").value.trim();
+  const result = await apiPut(`/doctor/complete/${completeId}`, { notes });
+  if (result.ok) {
+    closeModal("complete-modal");
+    showToast("Appointment completed!", "success");
+    const appt = allAppointments.find(a => a._id === completeId);
+    if (appt) { appt.status = "Completed"; appt.doctor_notes = notes; }
+    renderList();
+  }
+}
+
+async function cancelAppt(id) {
+  if (!confirm("Cancel this appointment?")) return;
+  const result = await apiPut(`/doctor/cancel/${id}`);
+  if (result.ok) {
+    showToast("Appointment cancelled.", "success");
+    const appt = allAppointments.find(a => a._id === id);
+    if (appt) appt.status = "Cancelled";
+    renderList();
+  }
+}
+
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Register — MediCare HMS</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="auth-wrapper">
+  <!-- LEFT PANEL -->
+  <div class="auth-left">
+    <div class="auth-brand">
+      <div class="auth-brand-icon">🏥</div>
+      <div>
+        <div class="auth-brand-name">MediCare</div>
+      </div>
+    </div>
+    <h1 class="auth-hero-title">Join MediCare<br><em>Today</em></h1>
+    <p class="auth-hero-sub">Create your free account and get access to top doctors in your area.</p>
+    <ul class="auth-feature-list">
+      <li><span>✅</span><span>Free to register</span></li>
+      <li><span>🩺</span><span>Access 50+ specialist doctors</span></li>
+      <li><span>💊</span><span>Track your health journey</span></li>
+      <li><span>📱</span><span>Available 24/7</span></li>
+    </ul>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="auth-right">
+    <div class="auth-form-container" style="max-width: 480px;">
+      <h2 class="auth-form-title">Create Account</h2>
+      <p class="auth-form-sub">Fill in your details to get started</p>
+
+      <div id="alert" class="alert hidden"></div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Full Name *</label>
+          <input type="text" id="name" class="form-control" placeholder="John Doe">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email Address *</label>
+          <input type="email" id="email" class="form-control" placeholder="john@example.com">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Password *</label>
+          <input type="password" id="password" class="form-control" placeholder="Min. 6 characters">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Phone Number</label>
+          <input type="tel" id="phone" class="form-control" placeholder="+91 9876543210">
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Age</label>
+          <input type="number" id="age" class="form-control" placeholder="25" min="1" max="120">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Blood Group</label>
+          <select id="blood_group" class="form-select">
+            <option value="">Select</option>
+            <option>A+</option><option>A-</option>
+            <option>B+</option><option>B-</option>
+            <option>O+</option><option>O-</option>
+            <option>AB+</option><option>AB-</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Address</label>
+        <input type="text" id="address" class="form-control" placeholder="City, State">
+      </div>
+
+      <button class="btn btn-primary btn-full btn-lg" onclick="register()" id="registerBtn">
+        Create Account
+      </button>
+
+      <div class="divider"></div>
+
+      <p class="text-center text-sm text-muted">
+        Already have an account?
+        <a href="login.html" style="color: var(--primary); font-weight: 600; text-decoration: none;">Sign in</a>
+      </p>
+    </div>
+  </div>
+</div>
+
+<script src="js/main.js"></script>
+<script>
+async function register() {
+  const name = document.getElementById("name").value.trim();
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+  const phone = document.getElementById("phone").value.trim();
+  const age = document.getElementById("age").value;
+  const blood_group = document.getElementById("blood_group").value;
+  const address = document.getElementById("address").value.trim();
+  const btn = document.getElementById("registerBtn");
+
+  hideAlert("alert");
+
+  if (!name || !email || !password) {
+    showAlert("alert", "Name, email, and password are required.");
+    return;
+  }
+
+  if (password.length < 6) {
+    showAlert("alert", "Password must be at least 6 characters.");
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Creating account...";
+
+  const result = await apiPost("/register", { name, email, password, phone, age, blood_group, address });
+  btn.disabled = false;
+  btn.textContent = "Create Account";
+
+  if (result.ok) {
+    showAlert("alert", result.data.message || "Registration successful!", "success");
+    setTimeout(() => window.location.href = "login.html", 1800);
+  } else {
+    showAlert("alert", result.data.error || "Registration failed.");
+  }
+}
+</script>
+</body>
+</html>

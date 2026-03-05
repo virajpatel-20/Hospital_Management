@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Patient Dashboard — MediCare</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="dashboard-layout" id="app">
+  <div class="loading-container"><div class="loading-spinner"></div></div>
+</div>
+
+<script src="../js/main.js"></script>
+<script src="../js/sidebar.js"></script>
+<script>
+async function init() {
+  const user = requireAuth("patient");
+  if (!user) return;
+
+  const app = document.getElementById("app");
+  app.innerHTML = renderPatientSidebar(user) + `
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-title">Dashboard</div>
+          <div class="topbar-sub">Welcome back, ${user.name}! 👋</div>
+        </div>
+        <div class="topbar-right">
+          <a href="book.html" class="btn btn-primary btn-sm">+ Book Appointment</a>
+        </div>
+      </div>
+      <div class="page-content">
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card"><div class="stat-icon blue">📋</div><div class="stat-info"><div class="stat-value" id="stat-total">—</div><div class="stat-label">Total Appointments</div></div></div>
+          <div class="stat-card"><div class="stat-icon orange">⏳</div><div class="stat-info"><div class="stat-value" id="stat-pending">—</div><div class="stat-label">Pending</div></div></div>
+          <div class="stat-card"><div class="stat-icon green">✅</div><div class="stat-info"><div class="stat-value" id="stat-approved">—</div><div class="stat-label">Approved</div></div></div>
+          <div class="stat-card"><div class="stat-icon blue">🏁</div><div class="stat-info"><div class="stat-value" id="stat-completed">—</div><div class="stat-label">Completed</div></div></div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Recent Appointments</div>
+                <div class="card-sub">Your last 5 bookings</div>
+              </div>
+              <a href="appointments.html" class="btn btn-ghost btn-sm">View All</a>
+            </div>
+            <div id="recent-appointments">
+              <div class="loading-container"><div class="loading-spinner"></div></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Quick Actions</div>
+                <div class="card-sub">Common tasks</div>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              <a href="book.html" class="btn btn-primary" style="justify-content: flex-start;">
+                📅 Book New Appointment
+              </a>
+              <a href="appointments.html" class="btn btn-outline" style="justify-content: flex-start;">
+                📋 View All Appointments
+              </a>
+              <a href="profile.html" class="btn btn-ghost" style="justify-content: flex-start;">
+                👤 Update Profile
+              </a>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="card-title" style="margin-bottom: 14px;">Profile Summary</div>
+            <div style="display: flex; flex-direction: column; gap: 8px; font-size: 13.5px;">
+              <div class="flex-between">
+                <span class="text-muted">Name</span>
+                <span style="font-weight: 600;">${user.name}</span>
+              </div>
+              <div class="flex-between">
+                <span class="text-muted">Email</span>
+                <span style="font-weight: 600;">${user.email}</span>
+              </div>
+              <div class="flex-between">
+                <span class="text-muted">Blood Group</span>
+                <span style="font-weight: 600;" id="blood-group">${user.blood_group || '—'}</span>
+              </div>
+              <div class="flex-between">
+                <span class="text-muted">Phone</span>
+                <span style="font-weight: 600;">${user.phone || '—'}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  setActiveSidebarLink();
+  await loadStats(user.email);
+  await loadRecentAppointments(user.email);
+}
+
+async function loadStats(email) {
+  const result = await apiGet(`/appointment-stats/${email}`);
+  if (result.ok) {
+    document.getElementById("stat-total").textContent = result.data.total;
+    document.getElementById("stat-pending").textContent = result.data.pending;
+    document.getElementById("stat-approved").textContent = result.data.approved;
+    document.getElementById("stat-completed").textContent = result.data.completed;
+  }
+}
+
+async function loadRecentAppointments(email) {
+  const result = await apiGet(`/my-appointments/${email}`);
+  const el = document.getElementById("recent-appointments");
+
+  if (!result.ok || !result.data.length) {
+    el.innerHTML = `
+      <div class="empty-state" style="padding: 30px 20px;">
+        <div class="empty-state-icon">📭</div>
+        <div class="empty-state-title">No appointments yet</div>
+        <a href="book.html" class="btn btn-primary btn-sm">Book your first</a>
+      </div>
+    `;
+    return;
+  }
+
+  const recent = result.data.slice(0, 5);
+  el.innerHTML = `<div class="appointment-list">` + recent.map(a => `
+    <div class="appointment-card status-${a.status.toLowerCase()}" style="padding: 14px 18px;">
+      <div class="appt-avatar">${getInitials(a.doctor_name)}</div>
+      <div class="appt-info">
+        <div class="appt-name" style="font-size: 14px;">Dr. ${a.doctor_name}</div>
+        <div class="appt-sub">${formatDate(a.date)} • ${formatTime(a.time)}</div>
+      </div>
+      <div>${statusBadge(a.status)}</div>
+    </div>
+  `).join("") + `</div>`;
+}
+
+init();
+</script>
+</body>
+</html>

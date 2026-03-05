@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Profile — Doctor | MediCare</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="dashboard-layout" id="app">
+  <div class="loading-container"><div class="loading-spinner"></div></div>
+</div>
+<script src="../js/main.js"></script>
+<script src="../js/sidebar.js"></script>
+<script>
+async function init() {
+  const user = requireAuth("doctor");
+  if (!user) return;
+  const app = document.getElementById("app");
+  app.innerHTML = renderDoctorSidebar(user) + `
+    <div class="main-content">
+      <div class="topbar">
+        <div class="topbar-left">
+          <div class="topbar-title">My Profile</div>
+          <div class="topbar-sub">Your professional information</div>
+        </div>
+      </div>
+      <div class="page-content">
+        <div class="profile-header" style="background: linear-gradient(135deg, #0E8A6B, #17B890);">
+          <div class="profile-avatar-lg">${getInitials(user.name)}</div>
+          <div>
+            <div class="profile-info-name">Dr. ${user.name}</div>
+            <div class="profile-info-role">${user.specialization || 'Doctor'}</div>
+            <div class="profile-info-email">${user.email}</div>
+          </div>
+        </div>
+        <div class="card" style="max-width: 600px;">
+          <div class="card-header"><div class="card-title">Edit Profile</div></div>
+          <div id="alert" class="alert hidden"></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Full Name</label>
+              <input type="text" id="name" class="form-control" value="${user.name}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Phone</label>
+              <input type="tel" id="phone" class="form-control" value="${user.phone || ''}">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-control" value="${user.email}" disabled style="opacity:0.7;">
+          </div>
+          <button class="btn btn-secondary" onclick="updateProfile('${user.email}')" id="saveBtn">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  `;
+  setActiveSidebarLink();
+}
+
+async function updateProfile(email) {
+  const name = document.getElementById("name").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+  const btn = document.getElementById("saveBtn");
+  if (!name) { showAlert("alert", "Name required."); return; }
+  btn.disabled = true; btn.textContent = "Saving...";
+  const result = await apiPut(`/profile/${email}`, { name, phone });
+  btn.disabled = false; btn.textContent = "Save Changes";
+  if (result.ok) {
+    const user = getUser();
+    user.name = name; user.phone = phone;
+    setUser(user);
+    showToast("Profile updated!", "success");
+  } else {
+    showAlert("alert", result.data.error || "Update failed.");
+  }
+}
+
+init();
+</script>
+</body>
+</html>
